@@ -1,0 +1,185 @@
+---
+title: "ST558 HW5 - Lee Worthington"
+format: html
+editor: visual
+---
+
+## Task 1: conceptual questions
+
+### Question 1 - What is the purpose of using cross-validation when fitting a random forest model?
+> Using CV with a random forest model allows you to:
+>
+> - Tune the hyperparameters of the random forest model to find the "optimal" hyperparameters and prevent overfitting
+> - Estimate the performance of the model on unseen test data using the 1 of k folds as the test set
+
+### Question 2 - Describe the bagged tree algorithm.
+> A bagged tree model involves:
+>
+> - Generating multiple datasets by sampling with replacement from the original dataset samples of size n
+> - Fitting a decision tree on each bootstrapped sample
+> - Generating a prediction with each tree
+> - Then generally taking the average or mode of the tree predictions in order to generate the final prediction
+
+### Question 3 - What is meant by a general linear model?
+> A generAL linear model is a linear model where the response is continuous and normal, that allows for both continuous and categorical predictors.
+
+### Question 4 - When fitting a multiple linear regression model, what does adding an interaction term do? That is, what does it allow the model to do differently as compared to when it is not included in the model?
+> In MLR including an interaction term allows you to capture the combined effect of multiple predictors on the target variable. 
+
+> Basically it allows the model to capture situations where a predictors effect on the target depends on another predictor. For instance if you had a sex*height interaction term for predicting weight the effect of height on weight may vary based on sex.
+
+### Question 5 - Why do we split our data into a training and test set?
+> The main purpose of a test set is to obtain an unbiased assessment of how a model generalizes to unseen data. To accomplish this, we need to split our full dataset into a training set, which is used to fit and tune the model, and a completely separate test set containing unseen data, on which we can measure the accuracy and performance of the trained model. 
+
+> This ensures that the evaluation metrics reflect the model's ability to perform on new, unseen data, rather than just the data it was trained on.
+
+
+## Task 2: fitting models
+### Question 1 - Understand the data
+#### Load and summarize the data
+```{r}
+#| eval: true
+#| warning: false
+
+# load libraries
+library(tidyverse)
+library(GGally)
+library(caret)
+
+# Read in the data
+heart_data_1 <- read_csv(
+  'C:\\Users\\lawor\\OneDrive\\Desktop\\School\\ST 558\\Homework\\ST558_HW5\\heart.csv',
+  show_col_types = FALSE
+)
+
+# Print summary
+summary(heart_data_1)
+
+# Print level count to confirm on these categorical/binary fields
+heart_data_1 |> 
+  summarise(
+    Sex = length(unique(Sex)),
+    ChestPainType = length(unique(ChestPainType)),
+    FastingBS = length(unique(FastingBS)),
+    RestingECG = length(unique(RestingECG)),
+    ExerciseAngina = length(unique(ExerciseAngina)),
+    ST_Slope = length(unique(ST_Slope)),
+    HeartDisease = length(unique(HeartDisease))
+  ) |>
+  print()
+
+```
+> Base on the summary data (and eyeballing the csv):
+> 
+> - Age, RestingBP, Cholsterol, MaxHR, and Oldpeak are continuous
+> - ChestPainType, RestingECG, and ST_Slope are characters
+> - Sex, FastingBS, ExerciseAngina, and HeartDisease are binary
+
+#### Count missing values with respect ot HeartDisease
+```{r}
+#| eval: true
+#| warning: false
+
+# Count missing values grouped by HeartDisease and print @@@@@@@@@@@@@@@@@@@@@
+heart_data_1 |>
+  group_by(HeartDisease) |>
+  summarise_all(~sum(is.na(.))) |>
+  gather(key = "Variable", value = "MissingValues", -HeartDisease) |>
+  arrange(desc(MissingValues), HeartDisease) |>
+  print()
+
+```
+> There appear to be no missing values at all, looking at the raw data confirms this as well
+
+#### Plots focusing on HeartDisease
+```{r}
+#| eval: true
+#| warning: false
+
+# Generate pair plots in chunks so this is readable
+GGally::ggpairs(heart_data_1, columns = c(12, 1, 2))
+GGally::ggpairs(heart_data_1, columns = c(12, 3, 4))
+GGally::ggpairs(heart_data_1, columns = c(12, 5, 6))
+GGally::ggpairs(heart_data_1, columns = c(12, 7, 8))
+GGally::ggpairs(heart_data_1, columns = c(12, 9, 10))
+GGally::ggpairs(heart_data_1, columns = c(12, 11))
+```
+> Based on these plots in terms of impact on HeartDisease these variarbles seem to have a large effect:
+>
+> - ChestPainType
+> - ExerciseAngina
+> - ST_Slope
+
+
+### Question 2 - Create new variables
+```{r}
+#| eval: true
+
+# Convert columns to appropriate data types
+heart_data_2 <- heart_data_1 |>
+  mutate(HeartDiseaseFactor = as.factor(HeartDisease)) |>
+  select(-ST_Slope, -HeartDisease)
+
+# Print output
+head(heart_data_2, 5)
+
+```
+
+### Question 3 - Create dummy variables
+```{r}
+#| eval: true
+
+# Create dummy variables for categorical predictors
+dummies <- dummyVars(~ Sex + ExerciseAngina + ChestPainType + RestingECG, data = heart_data_2)
+dummy_data <- predict(dummies, newdata = heart_data_2)
+
+# Convert dummy_data to a data frame
+dummy_data <- as.data.frame(dummy_data)
+
+# Combine the dummy variables with the original dataset
+heart_data_3 <- bind_cols(heart_data_2, dummy_data)
+
+# Print the updated heart_data
+print(heart_data_3)
+
+```
+
+### Split the data
+```{r}
+#| eval: true
+
+# Set seed then do a stratified split
+set.seed(1)  
+train_index <- createDataPartition(heart_data_3$HeartDiseaseFactor, p = 0.8, list = FALSE)
+train_data <- heart_data_3[train_index, ]
+test_data <- heart_data_3[-train_index, ]
+
+# check results
+nrow(train_data)
+nrow(test_data)
+
+```
+
+### Fit KNN model with Caret
+```{r}
+
+# Fit KNN model, here im trying to define all the options in line instead of as seperate objects to call
+knn_model <- train(
+  HeartDiseaseFactor ~ .,
+  data = train_data |> select(-Age, -Sex, -ChestPainType, -RestingECG, -ExerciseAngina),
+  method = "knn",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3),
+  tuneGrid = expand.grid(k = 1:40),
+  preProcess = c("center", "scale")
+)
+
+# Fit summary
+summary(knn_model)
+
+# Generate predictions
+test_data$HeartDiseaseKNN <- predict(knn_model, newdata = test_data)
+
+# Print confusion matrix
+confusionMatrix(test_data$HeartDiseaseFactor, test_data$HeartDiseaseKNN)
+
+```
