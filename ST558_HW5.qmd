@@ -114,6 +114,7 @@ GGally::ggpairs(heart_data_1, columns = c(12, 11))
 ### Question 2 - Create new variables
 ```{r}
 #| eval: true
+#| warning: false
 
 # Convert columns to appropriate data types
 heart_data_2 <- heart_data_1 |>
@@ -128,6 +129,7 @@ head(heart_data_2, 5)
 ### Question 3 - Create dummy variables for KNN
 ```{r}
 #| eval: true
+#| warning: false
 
 # Create dummy variables for categorical predictors
 dummies <- dummyVars(~ Sex + ExerciseAngina + ChestPainType + RestingECG, data = heart_data_2)
@@ -147,6 +149,7 @@ head(heart_data_2_dummies, 5)
 ### Split the data
 ```{r}
 #| eval: true
+#| warning: false
 
 # Set seed
 set.seed(1)  
@@ -173,6 +176,8 @@ nrow(test_data_dummies)
 
 ### Fit KNN model with Caret
 ```{r}
+#| eval: true
+#| warning: false
 
 # Fit KNN model, here im trying to define all the options in line instead of as seperate objects to call
 knn_model <- train(
@@ -191,12 +196,14 @@ summary(knn_model)
 test_data_dummies$HeartDiseaseKNN <- predict(knn_model, newdata = test_data_dummies)
 
 # Print confusion matrix
-confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data_dummies$HeartDiseaseKNN)
+confusionMatrix(test_data_dummies$HeartDiseaseKNN, test_data_dummies$HeartDiseaseFactor) # accuracy 0.8087 
 
 ```
 
 ### Fit logistic regression model with Caret
 ```{r}
+#| eval: true
+#| warning: false
 
 # Fit logistic model with every predictor
 logistic_model_1 <- train(
@@ -228,20 +235,110 @@ logistic_model_3 <- train(
   preProcess = c("center", "scale")
 )
 
-# Generate predictions
+# Print the training fits for each
+#logistic_model_1 # accuracy 0.8245502
+#logistic_model_2 # accuracy 0.7950438
+#logistic_model_3 # accuracy 0.7266481
+
+# Print summary for best model
+summary(logistic_model_1)
+
+# Generate predictions on test data
 test_data$HeartDiseaseLogistic1 <- predict(logistic_model_1, newdata = test_data)
-test_data$HeartDiseaseLogistic2 <- predict(logistic_model_2, newdata = test_data)
-test_data$HeartDiseaseLogistic3 <- predict(logistic_model_3, newdata = test_data)
 
-
-# Print confusion matrix
-confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data$HeartDiseaseLogistic1)
-confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data$HeartDiseaseLogistic2)
-confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data$HeartDiseaseLogistic3)
+# Print Conrfusion matrix for test data
+confusionMatrix(test_data$HeartDiseaseLogistic1, test_data$HeartDiseaseFactor) # accuracy 0.8033
 
 ```
 
 ### Fit tree models with Caret
+```{r}
+#| eval: true
+#| warning: false
+
+# Fit classification tree model with every predictor
+tree_model <- train(
+  HeartDiseaseFactor ~ .,
+  data = train_data,
+  method = "rpart",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3),
+  tuneGrid = expand.grid(cp = seq(0, 0.1, by = 0.001)),
+  preProcess = c("center", "scale")
+)
+
+# Fit random forest model with every predictor
+random_forest_model <- train(
+  HeartDiseaseFactor ~ .,
+  data = train_data,
+  method = "rf",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3),
+  tuneGrid = expand.grid(mtry = 1:(ncol(train_data) - 1)),
+  preProcess = c("center", "scale")
+)
+
+# Fit boosted model with every predictor
+boosted_tree_model <- train(
+  HeartDiseaseFactor ~ .,
+  data = train_data,
+  method = "gbm",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3),
+  tuneGrid = expand.grid(
+    n.trees = c(25, 50, 100, 200),
+    interaction.depth = 1:3,
+    shrinkage = 0.1,
+    n.minobsinnode = 10
+  ),
+  verbose = FALSE,
+  preProcess = c("center", "scale")
+)
+
+```
+
+```{r}
+#| eval: true
+#| warning: false
+
+# Generate predictions
+test_data$HeartDiseaseTree <- predict(tree_model, newdata = test_data)
+test_data$HeartDiseaseForest <- predict(random_forest_model, newdata = test_data)
+test_data$HeartDiseaseBoosted <- predict(boosted_tree_model, newdata = test_data)
+
+# Print confusion matrix
+confusionMatrix(test_data$HeartDiseaseTree, test_data$HeartDiseaseFactor)
+confusionMatrix(test_data$HeartDiseaseForest, test_data$HeartDiseaseFactor)
+confusionMatrix(test_data$HeartDiseaseBoosted, test_data$HeartDiseaseFactor)
+
+```
+
+
+
+```{r}
+#| eval: true
+#| warning: false
+
+# Calculate and print accuracy for each model
+accuracy_knn <- confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data_dummies$HeartDiseaseKNN)$overall['Accuracy']
+
+accuracy_logistic1 <- confusionMatrix(test_data$HeartDiseaseLogistic1, test_data$HeartDiseaseFactor)$overall['Accuracy']
+accuracy_logistic2 <- confusionMatrix(test_data$HeartDiseaseLogistic2, test_data$HeartDiseaseFactor)$overall['Accuracy']
+accuracy_logistic3 <- confusionMatrix(test_data$HeartDiseaseLogistic3, test_data$HeartDiseaseFactor)$overall['Accuracy']
+
+accuracy_tree <- confusionMatrix(test_data$HeartDiseaseTree, test_data$HeartDiseaseFactor)$overall['Accuracy']
+accuracy_forest <- confusionMatrix(test_data$HeartDiseaseForest, test_data$HeartDiseaseFactor)$overall['Accuracy']
+accuracy_boosted <- confusionMatrix(test_data$HeartDiseaseBoosted, test_data$HeartDiseaseFactor)$overall['Accuracy']
+
+
+# Create a dataframe to store accuracy
+accuracy_df <- data.frame(
+  Model = c('KNN', 'Logistic1', 'Logistic2', 'Logistic3', 'Tree', 'RandomForest', 'BoostedTree'),
+  Accuracy = c(accuracy_knn, accuracy_logistic1, accuracy_logistic2, accuracy_logistic3, accuracy_tree, accuracy_forest, accuracy_boosted)
+)
+
+# Print the accuracy comparison
+print(accuracy_df)
+
+```
+
 
 
 
