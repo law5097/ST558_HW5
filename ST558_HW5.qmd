@@ -106,10 +106,10 @@ GGally::ggpairs(heart_data_1, columns = c(12, 11))
 ```
 > Based on these plots in terms of impact on HeartDisease these variarbles seem to have a large effect:
 >
-> - ChestPainType
-> - ExerciseAngina
-> - ST_Slope
-
+> - ChestPainType - Atypical Angina (ATA), etc, based on a quick google search this seems like it's probably relevant when predicting heart disease
+> - ExerciseAngina - Chest pain from exercise flag, again probably makes sense as a predictor
+> - ST_Slope - I believeve this is the slope on cardiograms? Assignment says to remove this in the next step though, don't use
+> - Sex is probably the next best predictor in terms of seperation
 
 ### Question 2 - Create new variables
 ```{r}
@@ -125,7 +125,7 @@ head(heart_data_2, 5)
 
 ```
 
-### Question 3 - Create dummy variables
+### Question 3 - Create dummy variables for KNN
 ```{r}
 #| eval: true
 
@@ -137,10 +137,10 @@ dummy_data <- predict(dummies, newdata = heart_data_2)
 dummy_data <- as.data.frame(dummy_data)
 
 # Combine the dummy variables with the original dataset
-heart_data_3 <- bind_cols(heart_data_2, dummy_data)
+heart_data_2_dummies <- bind_cols(heart_data_2, dummy_data)
 
 # Print the updated heart_data
-print(heart_data_3)
+head(heart_data_2_dummies, 5)
 
 ```
 
@@ -148,15 +148,26 @@ print(heart_data_3)
 ```{r}
 #| eval: true
 
-# Set seed then do a stratified split
+# Set seed
 set.seed(1)  
-train_index <- createDataPartition(heart_data_3$HeartDiseaseFactor, p = 0.8, list = FALSE)
-train_data <- heart_data_3[train_index, ]
-test_data <- heart_data_3[-train_index, ]
+
+# Split dummy data and drop original fields
+train_index_dummies <- createDataPartition(heart_data_2_dummies$HeartDiseaseFactor, p = 0.8, list = FALSE)
+train_data_dummies <- heart_data_2_dummies[train_index_dummies, ]
+test_data_dummies <- heart_data_2_dummies[-train_index_dummies, ]
+train_data_dummies <- train_data_dummies |> select(-Sex, -ExerciseAngina, -ChestPainType, -RestingECG)
+test_data_dummies <- test_data_dummies |> select(-Sex, -ExerciseAngina, -ChestPainType, -RestingECG)
+
+# Split dummy data and drop original fields
+train_index <- createDataPartition(heart_data_2$HeartDiseaseFactor, p = 0.8, list = FALSE)
+train_data <- heart_data_2[train_index, ]
+test_data <- heart_data_2[-train_index, ]
 
 # check results
 nrow(train_data)
+nrow(train_data_dummies)
 nrow(test_data)
+nrow(test_data_dummies)
 
 ```
 
@@ -166,7 +177,7 @@ nrow(test_data)
 # Fit KNN model, here im trying to define all the options in line instead of as seperate objects to call
 knn_model <- train(
   HeartDiseaseFactor ~ .,
-  data = train_data |> select(-Age, -Sex, -ChestPainType, -RestingECG, -ExerciseAngina),
+  data = train_data_dummies,
   method = "knn",
   trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3),
   tuneGrid = expand.grid(k = 1:40),
@@ -177,9 +188,60 @@ knn_model <- train(
 summary(knn_model)
 
 # Generate predictions
-test_data$HeartDiseaseKNN <- predict(knn_model, newdata = test_data)
+test_data_dummies$HeartDiseaseKNN <- predict(knn_model, newdata = test_data_dummies)
 
 # Print confusion matrix
-confusionMatrix(test_data$HeartDiseaseFactor, test_data$HeartDiseaseKNN)
+confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data_dummies$HeartDiseaseKNN)
 
 ```
+
+### Fit logistic regression model with Caret
+```{r}
+
+# Fit logistic model with every predictor
+logistic_model_1 <- train(
+  HeartDiseaseFactor ~ .,
+  data = train_data,
+  method = "glm",
+  family = "binomial",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3),
+  preProcess = c("center", "scale")
+)
+
+# Fit logistic model with what appear to be strong predictors looking at EDA
+logistic_model_2 <- train(
+  HeartDiseaseFactor ~ .,
+  data = train_data |> select(HeartDiseaseFactor, ChestPainType, ExerciseAngina, Sex),
+  method = "glm",
+  family = "binomial",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3),
+  preProcess = c("center", "scale")
+)
+
+# Fit logistic model using ExerciseAgina as the single predictor
+logistic_model_3 <- train(
+  HeartDiseaseFactor ~ .,
+  data = train_data |> select(HeartDiseaseFactor, ExerciseAngina),
+  method = "glm",
+  family = "binomial",
+  trControl = trainControl(method = "repeatedcv", number = 10, repeats = 3),
+  preProcess = c("center", "scale")
+)
+
+# Generate predictions
+test_data$HeartDiseaseLogistic1 <- predict(logistic_model_1, newdata = test_data)
+test_data$HeartDiseaseLogistic2 <- predict(logistic_model_2, newdata = test_data)
+test_data$HeartDiseaseLogistic3 <- predict(logistic_model_3, newdata = test_data)
+
+
+# Print confusion matrix
+confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data$HeartDiseaseLogistic1)
+confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data$HeartDiseaseLogistic2)
+confusionMatrix(test_data_dummies$HeartDiseaseFactor, test_data$HeartDiseaseLogistic3)
+
+```
+
+### Fit tree models with Caret
+
+
+
