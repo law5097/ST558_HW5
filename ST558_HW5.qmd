@@ -7,36 +7,43 @@ editor: visual
 ## Task 1: conceptual questions
 
 ### Question 1 - What is the purpose of using cross-validation when fitting a random forest model?
+
 > Using CV with a random forest model allows you to:
 >
-> - Tune the hyperparameters of the random forest model to find the "optimal" hyperparameters and prevent overfitting
-> - Estimate the performance of the model on unseen test data using the 1 of k folds as the test set
+> -   Tune the hyperparameters of the random forest model to find the "optimal" hyperparameters and prevent overfitting
+> -   Estimate the performance of the model on unseen test data using the 1 of k folds as the test set
 
 ### Question 2 - Describe the bagged tree algorithm.
+
 > A bagged tree model involves:
 >
-> - Generating multiple datasets by sampling with replacement from the original dataset samples of size n
-> - Fitting a decision tree on each bootstrapped sample
-> - Generating a prediction with each tree
-> - Then generally taking the average or mode of the tree predictions in order to generate the final prediction
+> -   Generating multiple datasets by sampling with replacement from the original dataset samples of size n
+> -   Fitting a decision tree on each bootstrapped sample
+> -   Generating a prediction with each tree
+> -   Then generally taking the average or mode of the tree predictions in order to generate the final prediction
 
 ### Question 3 - What is meant by a general linear model?
+
 > A generAL linear model is a linear model where the response is continuous and normal, that allows for both continuous and categorical predictors.
 
 ### Question 4 - When fitting a multiple linear regression model, what does adding an interaction term do? That is, what does it allow the model to do differently as compared to when it is not included in the model?
-> In MLR including an interaction term allows you to capture the combined effect of multiple predictors on the target variable. 
 
-> Basically it allows the model to capture situations where a predictors effect on the target depends on another predictor. For instance if you had a sex*height interaction term for predicting weight the effect of height on weight may vary based on sex.
+> In MLR including an interaction term allows you to capture the combined effect of multiple predictors on the target variable.
+
+> Basically it allows the model to capture situations where a predictors effect on the target depends on another predictor. For instance if you had a sex\*height interaction term for predicting weight the effect of height on weight may vary based on sex.
 
 ### Question 5 - Why do we split our data into a training and test set?
-> The main purpose of a test set is to obtain an unbiased assessment of how a model generalizes to unseen data. To accomplish this, we need to split our full dataset into a training set, which is used to fit and tune the model, and a completely separate test set containing unseen data, on which we can measure the accuracy and performance of the trained model. 
+
+> The main purpose of a test set is to obtain an unbiased assessment of how a model generalizes to unseen data. To accomplish this we need to split our full dataset into a training set, which is used to fit and tune the model, and a completely separate test set containing unseen data on which we can measure the accuracy and performance of the trained model.
 
 > This ensures that the evaluation metrics reflect the model's ability to perform on new, unseen data, rather than just the data it was trained on.
 
-
 ## Task 2: fitting models
+
 ### Question 1 - Understand the data
+
 #### Load and summarize the data
+
 ```{r}
 #| eval: true
 #| warning: false
@@ -45,6 +52,9 @@ editor: visual
 library(tidyverse)
 library(GGally)
 library(caret)
+
+# set seed
+set.seed(1)  
 
 # Read in the data
 heart_data_1 <- read_csv(
@@ -69,13 +79,15 @@ heart_data_1 |>
   print()
 
 ```
+
 > Base on the summary data (and eyeballing the csv):
-> 
-> - Age, RestingBP, Cholsterol, MaxHR, and Oldpeak are continuous
-> - ChestPainType, RestingECG, and ST_Slope are characters
-> - Sex, FastingBS, ExerciseAngina, and HeartDisease are binary
+>
+> -   Age, RestingBP, Cholsterol, MaxHR, and Oldpeak are continuous
+> -   ChestPainType, RestingECG, and ST_Slope are characters
+> -   Sex, FastingBS, ExerciseAngina, and HeartDisease are binary
 
 #### Count missing values with respect ot HeartDisease
+
 ```{r}
 #| eval: true
 #| warning: false
@@ -89,9 +101,11 @@ heart_data_1 |>
   print()
 
 ```
+
 > There appear to be no missing values at all, looking at the raw data confirms this as well
 
 #### Plots focusing on HeartDisease
+
 ```{r}
 #| eval: true
 #| warning: false
@@ -104,14 +118,16 @@ GGally::ggpairs(heart_data_1, columns = c(12, 7, 8))
 GGally::ggpairs(heart_data_1, columns = c(12, 9, 10))
 GGally::ggpairs(heart_data_1, columns = c(12, 11))
 ```
+
 > Based on these plots in terms of impact on HeartDisease these variarbles seem to have a large effect:
 >
-> - ChestPainType - Atypical Angina (ATA), etc, based on a quick google search this seems like it's probably relevant when predicting heart disease
-> - ExerciseAngina - Chest pain from exercise flag, again probably makes sense as a predictor
-> - ST_Slope - I believeve this is the slope on cardiograms? Assignment says to remove this in the next step though, don't use
-> - Sex is probably the next best predictor in terms of seperation
+> -   ChestPainType - Atypical Angina (ATA), etc, based on a quick google search this seems like it's probably relevant when predicting heart disease
+> -   ExerciseAngina - Chest pain from exercise flag, again probably makes sense as a predictor
+> -   ST_Slope - I believeve this is the slope on cardiograms? Assignment says to remove this in the next step though, don't use
+> -   Sex - Is probably the next best predictor in terms of seperation
 
 ### Question 2 - Create new variables
+
 ```{r}
 #| eval: true
 #| warning: false
@@ -127,6 +143,7 @@ head(heart_data_2, 5)
 ```
 
 ### Question 3 - Create dummy variables for KNN
+
 ```{r}
 #| eval: true
 #| warning: false
@@ -146,19 +163,19 @@ head(heart_data_2_dummies, 5)
 
 ```
 
-### Split the data
+### Split the data into train/test for the dummy and non-dummy data
+
 ```{r}
 #| eval: true
 #| warning: false
 
-# Set seed
-set.seed(1)  
-
 # Split dummy data and drop original fields
 train_index_dummies <- createDataPartition(heart_data_2_dummies$HeartDiseaseFactor, p = 0.8, list = FALSE)
+
 train_data_dummies <- heart_data_2_dummies[train_index_dummies, ]
-test_data_dummies <- heart_data_2_dummies[-train_index_dummies, ]
 train_data_dummies <- train_data_dummies |> select(-Sex, -ExerciseAngina, -ChestPainType, -RestingECG)
+
+test_data_dummies <- heart_data_2_dummies[-train_index_dummies, ]
 test_data_dummies <- test_data_dummies |> select(-Sex, -ExerciseAngina, -ChestPainType, -RestingECG)
 
 # Split dummy data and drop original fields
@@ -175,11 +192,12 @@ nrow(test_data_dummies)
 ```
 
 ### Fit KNN model with Caret
+
 ```{r}
 #| eval: true
 #| warning: false
 
-# Fit KNN model, here im trying to define all the options in line instead of as seperate objects to call
+# Fit KNN model
 knn_model <- train(
   HeartDiseaseFactor ~ .,
   data = train_data_dummies,
@@ -190,7 +208,7 @@ knn_model <- train(
 )
 
 # Fit summary
-summary(knn_model)
+# summary(knn_model)
 
 # Generate predictions
 test_data_dummies$HeartDiseaseKNN <- predict(knn_model, newdata = test_data_dummies)
@@ -199,8 +217,10 @@ test_data_dummies$HeartDiseaseKNN <- predict(knn_model, newdata = test_data_dumm
 confusionMatrix(test_data_dummies$HeartDiseaseKNN, test_data_dummies$HeartDiseaseFactor) # accuracy 0.8087 
 
 ```
+> KNN model here has an accuracy of .8306 on the test set
 
 ### Fit logistic regression model with Caret
+
 ```{r}
 #| eval: true
 #| warning: false
@@ -243,15 +263,17 @@ logistic_model_3 <- train(
 # Print summary for best model
 summary(logistic_model_1)
 
-# Generate predictions on test data
+# Generate predictions on test data + print confusion matrix for the best model (model 1)
 test_data$HeartDiseaseLogistic1 <- predict(logistic_model_1, newdata = test_data)
-
-# Print Conrfusion matrix for test data
+test_data$HeartDiseaseLogistic2 <- predict(logistic_model_2, newdata = test_data)
+test_data$HeartDiseaseLogistic3 <- predict(logistic_model_3, newdata = test_data)
 confusionMatrix(test_data$HeartDiseaseLogistic1, test_data$HeartDiseaseFactor) # accuracy 0.8033
 
 ```
+> Best logistic model has an accuracy of 0.8033 on the test set
 
 ### Fit tree models with Caret
+
 ```{r}
 #| eval: true
 #| warning: false
@@ -309,8 +331,7 @@ confusionMatrix(test_data$HeartDiseaseForest, test_data$HeartDiseaseFactor)
 confusionMatrix(test_data$HeartDiseaseBoosted, test_data$HeartDiseaseFactor)
 
 ```
-
-
+> Tree performance is weaker than the others, but the random forest and boosted tree have similar performance to the logistic model
 
 ```{r}
 #| eval: true
@@ -338,7 +359,5 @@ accuracy_df <- data.frame(
 print(accuracy_df)
 
 ```
-
-
-
+> Overall the KNN model has the best test test accurracy as seen above, however the logistic model/random forest/boosted tree have almost comparable performance
 
